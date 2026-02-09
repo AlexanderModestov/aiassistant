@@ -1,6 +1,6 @@
 clickhouse-connect==0.7.0
 anthropic
-python-telegram-bot==21.0
+aiogram>=3.4
 apscheduler==3.10.4
 python-dotenv==1.0.0
 pytz==2024.1
