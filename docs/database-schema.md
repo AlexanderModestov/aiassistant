@@ -37,56 +37,18 @@
 
 ## Tables Overview
 
-| Table | Description | Row Count |
-|-------|-------------|-----------|
-| `school_stats` | Агрегированная статистика по школам | - |
-| `school_stats_mv` | Материализованное представление школ | - |
-| `parallel_reg_stats` | Статистика регистраций по параллелям | - |
-| `parallel_reg_mv` | Материализованное представление параллелей | - |
-| `school_work` | Учебная активность (просмотры) | 567,937 |
-| `work_results_n` | Результаты работ (основная) | 1,372,247 |
-| `work_results_06` | Результаты работ (архив) | 91,349 |
-| `company_crm` | CRM данные и транзакции | 7,637 |
+| Table | Description | Row Count | Доступна для запросов |
+|-------|-------------|-----------|----------------------|
+| `school_work` | Учебная активность (просмотры) | 567,937 | ✅ Да |
+| `work_results_n` | Результаты работ (основная) | 1,372,247 | ✅ Да |
+| `work_results_06` | Результаты работ (архив) | 91,349 | ✅ Да |
+| `company_crm` | CRM данные и транзакции | 7,637 | ✅ Да |
+| `school_stats` | Агрегат по школам | - | ❌ AggregatingMergeTree |
+| `school_stats_mv` | MV по школам | - | ❌ AggregatingMergeTree |
+| `parallel_reg_stats` | Агрегат по параллелям | - | ❌ AggregatingMergeTree |
+| `parallel_reg_mv` | MV по параллелям | - | ❌ AggregatingMergeTree |
 
----
-
-## Справочники и агрегаты
-
-### Table: `school_stats`
-
-Агрегированная/справочная таблица по школам.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `school` | String | Идентификатор или название школы |
-| `school_registration_date` | Date | Дата регистрации школы |
-
-### Table: `school_stats_mv`
-
-Материализованное представление для ускорения аналитических запросов по школам.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `school` | String | Идентификатор или название школы |
-| `school_registration_date` | Date | Дата регистрации школы |
-
-### Table: `parallel_reg_stats`
-
-Агрегированная статистика по параллелям.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `school_parallel` | String | Параллель (например: 5А, 6Б, 10В) |
-| `registration_date` | Date | Дата регистрации |
-
-### Table: `parallel_reg_mv`
-
-Материализованное представление регистраций параллелей.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `school_parallel` | String | Параллель |
-| `registration_date` | Date | Дата регистрации |
+> **Примечание:** Таблицы с `AggregatingMergeTree` используют агрегатные функции и не подходят для прямых запросов через text-to-sql.
 
 ---
 

@@ -19,32 +19,6 @@ def _get_client() -> Anthropic:
     return _client
 
 DATABASE_SCHEMA = """
-## Справочники и агрегаты
-
-### school_stats — Агрегированная статистика по школам
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| school | String | Идентификатор/название школы |
-| school_registration_date | Date | Дата регистрации школы |
-
-### school_stats_mv — Материализованное представление по школам
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| school | String | Идентификатор/название школы |
-| school_registration_date | Date | Дата регистрации школы |
-
-### parallel_reg_stats — Статистика регистраций по параллелям
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| school_parallel | String | Параллель (например: 5А, 6Б, 10В) |
-| registration_date | Date | Дата регистрации |
-
-### parallel_reg_mv — Материализованное представление параллелей
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| school_parallel | String | Параллель |
-| registration_date | Date | Дата регистрации |
-
 ## Факт-таблицы
 
 ### school_work — Учебная активность (просмотры)
@@ -167,6 +141,8 @@ QUERY_SELECTION_PROMPT = """Ты SQL-эксперт для аналитики о
 - LIMIT до 20 строк
 - Для подсчёта уникальных значений используй uniqExact()
 - submission_date в work_results_n — это String, используй toDate(submission_date)
+- НЕ используй UNION ALL — делай простые запросы к одной таблице
+- Используй только таблицы из схемы: school_work, work_results_n, work_results_06, company_crm
 - Возвращай ТОЛЬКО SQL запрос, без пояснений и markdown
 
 SQL:
@@ -214,6 +190,10 @@ def answer_question(question: str) -> str:
     sql_upper = sql_query.upper()
     if any(keyword in sql_upper for keyword in ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE"]):
         return "❌ Извините, этот запрос не разрешён."
+
+    # Block UNION - causes type conflicts in ClickHouse
+    if "UNION" in sql_upper:
+        return "❌ Задайте конкретный вопрос:\n• Сколько просмотров за неделю?\n• Топ 5 регионов\n• Средний результат по математике"
 
     # Step 2: Execute query
     try:
