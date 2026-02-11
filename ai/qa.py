@@ -19,23 +19,7 @@ def _get_client() -> Anthropic:
     return _client
 
 DATABASE_SCHEMA = """
-## Факт-таблицы
-
-### school_work — Учебная активность (просмотры)
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| date | Date | Дата события |
-| direction | String | Направление обучения |
-| role | String | Роль: "Ученик" или "Учитель" |
-| region | String | Регион РФ |
-| municipality | String | Муниципалитет |
-| school | String | Название школы |
-| class | String | Класс |
-| supplier | String | Поставщик/платформа |
-| subject | String | Предмет |
-| total_view | UInt32 | Количество просмотров |
-
-### work_results_n — Результаты работ (основная таблица, ~1.4M строк)
+## Таблица work_results_n — Результаты работ
 | Колонка | Тип | Описание |
 |---------|-----|----------|
 | id | UInt64 | Уникальный ID |
@@ -65,42 +49,10 @@ DATABASE_SCHEMA = """
 | id_registration | String | ID регистрации |
 | id_order | String | ID заказа |
 | inn | String | ИНН школы |
-
-### work_results_06 — Результаты работ (исторический срез)
-Структура идентична work_results_n, используется для архивных/исторических данных.
-
-## CRM-контур
-
-### company_crm — Финансовые транзакции и CRM
-| Колонка | Тип | Описание |
-|---------|-----|----------|
-| id | UInt32 | Уникальный ID |
-| inn | String | ИНН клиента |
-| title | String | Название компании/школы |
-| name_transaction | String | Название транзакции |
-| stage_transaction | String | Этап сделки: Новая, Отправить КП, ВКС, Ждем активности, Отказ, Партнеры |
-| sum | Float64 | Сумма сделки |
-| comment | String | Комментарий |
-| uploaded_at | DateTime | Дата загрузки |
-| reg_operator | String | Ответственный оператор |
 """
 
 SQL_EXAMPLES = """
 ## Примеры SQL-запросов
-
--- Просмотры за день по ролям
-SELECT role, sum(total_view) as views
-FROM school_work
-WHERE date = today()
-GROUP BY role
-
--- Топ-10 регионов по активности
-SELECT region, sum(total_view) as views, uniqExact(school) as schools
-FROM school_work
-WHERE date >= today() - 7
-GROUP BY region
-ORDER BY views DESC
-LIMIT 10
 
 -- Средний результат по предметам
 SELECT subject, avg(result_percent) as avg_score, count() as works
@@ -109,18 +61,33 @@ WHERE toDate(submission_date) = today()
 GROUP BY subject
 ORDER BY works DESC
 
--- Сравнение недель
-SELECT toStartOfWeek(date) as week, sum(total_view) as views
-FROM school_work
-GROUP BY week
-ORDER BY week DESC
-LIMIT 4
+-- Топ-10 регионов по количеству работ
+SELECT region, count() as works, avg(result_percent) as avg_score
+FROM work_results_n
+WHERE toDate(submission_date) >= today() - 7
+GROUP BY region
+ORDER BY works DESC
+LIMIT 10
 
--- Воронка CRM по этапам
-SELECT stage_transaction, count() as deals, sum(sum) as total_sum
-FROM company_crm
-GROUP BY stage_transaction
-ORDER BY deals DESC
+-- Статистика по типам работ
+SELECT work_type, count() as works, avg(result_percent) as avg_score
+FROM work_results_n
+GROUP BY work_type
+ORDER BY works DESC
+
+-- Результаты по параллелям
+SELECT parallel, count() as works, avg(result_percent) as avg_score
+FROM work_results_n
+WHERE toDate(submission_date) = today()
+GROUP BY parallel
+ORDER BY parallel
+
+-- Количество работ по дням
+SELECT toDate(submission_date) as date, count() as works
+FROM work_results_n
+WHERE toDate(submission_date) >= today() - 7
+GROUP BY date
+ORDER BY date DESC
 """
 
 QUERY_SELECTION_PROMPT = """Ты SQL-эксперт для аналитики образовательной платформы. База данных: ClickHouse.
@@ -138,11 +105,11 @@ QUERY_SELECTION_PROMPT = """Ты SQL-эксперт для аналитики о
 - Только SELECT (никаких INSERT/UPDATE/DELETE/DROP)
 - Сегодня: {today}
 - Используй today() для текущей даты
-- LIMIT до 20 строк
+- Используй LIMIT при необходимости
 - Для подсчёта уникальных значений используй uniqExact()
 - submission_date в work_results_n — это String, используй toDate(submission_date)
 - НЕ используй UNION ALL — делай простые запросы к одной таблице
-- Используй только таблицы из схемы: school_work, work_results_n, work_results_06, company_crm
+- Используй ТОЛЬКО таблицу work_results_n
 - Возвращай ТОЛЬКО SQL запрос, без пояснений и markdown
 
 SQL:
@@ -214,7 +181,7 @@ def answer_question(question: str) -> str:
         return f"❌ Ошибка выполнения запроса: {str(e)}"
 
     # Step 3: Generate answer
-    results_text = str(results[:20]) if results else "Нет данных"
+    results_text = str(results) if results else "Нет данных"
 
     answer_response = _get_client().messages.create(
         model="claude-sonnet-4-20250514",
