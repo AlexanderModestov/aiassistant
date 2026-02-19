@@ -6,6 +6,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from conversation import ConversationStore
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ if _allowed_users_str.strip():
     ALLOWED_USERS = {int(uid.strip()) for uid in _allowed_users_str.split(",") if uid.strip()}
 
 router = Router()
+conversation_store = ConversationStore()
 
 
 def is_user_allowed(user_id: int) -> bool:
@@ -101,10 +103,23 @@ async def help_command(message: Message) -> None:
         "Команды:\n"
         "/start - Получить Chat ID\n"
         "/report - Получить отчёт сейчас\n"
+        "/clear - Сбросить контекст диалога\n"
         "/help - Эта справка\n\n"
-        "Также вы можете задать вопрос о данных в свободной форме.",
+        "Также вы можете задать вопрос о данных в свободной форме.\n"
+        "Бот помнит контекст диалога для уточняющих вопросов.",
         parse_mode=ParseMode.MARKDOWN,
     )
+
+
+@router.message(Command("clear"))
+async def clear_command(message: Message) -> None:
+    """Handle /clear command - reset conversation context."""
+    if not is_user_allowed(message.from_user.id):
+        await message.answer("⛔ Доступ запрещён.")
+        return
+
+    conversation_store.clear(message.from_user.id)
+    await message.answer("🔄 Контекст диалога сброшен.")
 
 
 @router.message(Command("report"))
@@ -151,7 +166,7 @@ async def handle_message(message: Message) -> None:
 
     try:
         from ai.qa import answer_question
-        answer = answer_question(question)
+        answer = answer_question(question, message.from_user.id, conversation_store)
         await safe_reply(message, answer)
     except Exception as e:
         logger.exception("Error answering question")

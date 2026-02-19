@@ -1,8 +1,10 @@
 import os
 import logging
+from datetime import date
 from dotenv import load_dotenv
 from anthropic import Anthropic
 from queries.base import execute_query
+from conversation import ConversationStore
 
 load_dotenv()
 
@@ -90,16 +92,11 @@ GROUP BY date
 ORDER BY date DESC
 """
 
-QUERY_SELECTION_PROMPT = """Ты SQL-эксперт для аналитики образовательной платформы. База данных: ClickHouse.
+SQL_SYSTEM_PROMPT = """Ты SQL-эксперт для аналитики образовательной платформы. База данных: ClickHouse.
 
 {schema}
 
 {examples}
-
-## Задача
-Вопрос пользователя: {question}
-
-Напиши SELECT запрос для ClickHouse.
 
 ## Правила
 - Только SELECT (никаких INSERT/UPDATE/DELETE/DROP)
@@ -111,37 +108,50 @@ QUERY_SELECTION_PROMPT = """Ты SQL-эксперт для аналитики о
 - НЕ используй UNION ALL — делай простые запросы к одной таблице
 - Используй ТОЛЬКО таблицу work_results_n
 - Возвращай ТОЛЬКО SQL запрос, без пояснений и markdown
+- Если пользователь ссылается на предыдущий вопрос или запрос, используй контекст из истории диалога"""
 
-SQL:
-"""
-
-ANSWER_PROMPT = """Ты аналитик образовательной платформы.
-
-Вопрос пользователя: {question}
-
-Результат запроса:
-{results}
-
-Ответь кратко и понятно на русском языке. Если данных нет или запрос не вернул результатов, скажи об этом.
-"""
+ANSWER_SYSTEM_PROMPT = """Ты аналитик образовательной платформы.
+Отвечай кратко и понятно на русском языке. Если данных нет или запрос не вернул результатов, скажи об этом.
+Если пользователь ссылается на предыдущий вопрос, используй контекст из истории диалога."""
 
 
-def answer_question(question: str) -> str:
-    """Answer a user question about the data."""
-    from datetime import date
+def _build_sql_messages(exchanges: list[dict], question: str) -> list[dict]:
+    """Build message history for SQL generation."""
+    messages = []
+    for ex in exchanges:
+        messages.append({"role": "user", "content": ex["question"]})
+        messages.append({"role": "assistant", "content": ex["sql"]})
+    messages.append({"role": "user", "content": question})
+    return messages
+
+
+def _build_answer_messages(exchanges: list[dict], question: str, results_text: str) -> list[dict]:
+    """Build message history for answer generation."""
+    messages = []
+    for ex in exchanges:
+        messages.append({"role": "user", "content": ex["question"]})
+        messages.append({"role": "assistant", "content": ex["answer"]})
+    messages.append({"role": "user", "content": f"{question}\n\nРезультат запроса:\n{results_text}"})
+    return messages
+
+
+def answer_question(question: str, user_id: int, store: ConversationStore) -> str:
+    """Answer a user question about the data with conversation context."""
+    exchanges = store.get_exchanges(user_id)
 
     # Step 1: Generate SQL query
-    query_prompt = QUERY_SELECTION_PROMPT.format(
+    sql_system = SQL_SYSTEM_PROMPT.format(
         schema=DATABASE_SCHEMA,
         examples=SQL_EXAMPLES,
-        question=question,
         today=date.today(),
     )
+    sql_messages = _build_sql_messages(exchanges, question)
 
     query_response = _get_client().messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=500,
-        messages=[{"role": "user", "content": query_prompt}],
+        system=sql_system,
+        messages=sql_messages,
     )
 
     sql_query = query_response.content[0].text.strip()
@@ -182,14 +192,18 @@ def answer_question(question: str) -> str:
 
     # Step 3: Generate answer
     results_text = str(results) if results else "Нет данных"
+    answer_messages = _build_answer_messages(exchanges, question, results_text)
 
     answer_response = _get_client().messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1024,
-        messages=[{"role": "user", "content": ANSWER_PROMPT.format(
-            question=question,
-            results=results_text,
-        )}],
+        system=ANSWER_SYSTEM_PROMPT,
+        messages=answer_messages,
     )
 
-    return answer_response.content[0].text
+    answer = answer_response.content[0].text
+
+    # Store the exchange for future context
+    store.add_exchange(user_id, question, sql_query, answer)
+
+    return answer
