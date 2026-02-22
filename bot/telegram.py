@@ -166,8 +166,23 @@ async def handle_message(message: Message) -> None:
 
     try:
         from ai.qa import answer_question
-        answer = answer_question(question, message.from_user.id, conversation_store)
-        await safe_reply(message, answer)
+        from supabase_client import log_qa_exchange
+
+        result = answer_question(question, message.from_user.id, conversation_store)
+        await safe_reply(message, result.answer)
+
+        log_qa_exchange(
+            telegram_user_id=message.from_user.id,
+            telegram_username=message.from_user.username,
+            question=question,
+            generated_sql=result.generated_sql,
+            answer=result.answer,
+            success=result.success,
+            error_message=result.error_message,
+            sql_execution_time_ms=result.sql_execution_time_ms,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+        )
     except Exception as e:
         logger.exception("Error answering question")
         await message.answer(f"❌ Ошибка: {str(e)}")

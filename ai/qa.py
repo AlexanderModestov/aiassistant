@@ -1,5 +1,7 @@
 import os
 import logging
+import time as _time
+from dataclasses import dataclass
 from datetime import date
 from dotenv import load_dotenv
 from anthropic import Anthropic
@@ -115,6 +117,18 @@ ANSWER_SYSTEM_PROMPT = """Ты аналитик образовательной �
 Если пользователь ссылается на предыдущий вопрос, используй контекст из истории диалога."""
 
 
+@dataclass
+class QAResult:
+    """Result of a Q&A exchange with metadata for logging."""
+    answer: str
+    success: bool = True
+    generated_sql: str | None = None
+    error_message: str | None = None
+    sql_execution_time_ms: int | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 def _build_sql_messages(exchanges: list[dict], question: str) -> list[dict]:
     """Build message history for SQL generation."""
     messages = []
@@ -135,7 +149,7 @@ def _build_answer_messages(exchanges: list[dict], question: str, results_text: s
     return messages
 
 
-def answer_question(question: str, user_id: int, store: ConversationStore) -> str:
+def answer_question(question: str, user_id: int, store: ConversationStore) -> QAResult:
     """Answer a user question about the data with conversation context."""
     exchanges = store.get_exchanges(user_id)
 
@@ -155,6 +169,8 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> st
     )
 
     sql_query = query_response.content[0].text.strip()
+    total_input = query_response.usage.input_tokens
+    total_output = query_response.usage.output_tokens
 
     # Clean up query (remove markdown code blocks if present)
     if sql_query.startswith("```"):
@@ -166,15 +182,31 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> st
     # Safety check
     sql_upper = sql_query.upper()
     if any(keyword in sql_upper for keyword in ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE"]):
-        return "❌ Извините, этот запрос не разрешён."
+        return QAResult(
+            answer="❌ Извините, этот запрос не разрешён.",
+            success=False,
+            generated_sql=sql_query,
+            error_message="Unsafe SQL keywords detected",
+            input_tokens=total_input,
+            output_tokens=total_output,
+        )
 
     # Block UNION - causes type conflicts in ClickHouse
     if "UNION" in sql_upper:
-        return "❌ Задайте конкретный вопрос:\n• Сколько просмотров за неделю?\n• Топ 5 регионов\n• Средний результат по математике"
+        return QAResult(
+            answer="❌ Задайте конкретный вопрос:\n• Сколько просмотров за неделю?\n• Топ 5 регионов\n• Средний результат по математике",
+            success=False,
+            generated_sql=sql_query,
+            error_message="UNION queries not supported",
+            input_tokens=total_input,
+            output_tokens=total_output,
+        )
 
     # Step 2: Execute query
+    query_start = _time.monotonic()
     try:
         results = execute_query(sql_query)
+        sql_execution_time_ms = int((_time.monotonic() - query_start) * 1000)
         logger.info(
             "Q&A Query executed | Question: %s | SQL: %s | Rows returned: %d",
             question,
@@ -182,13 +214,22 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> st
             len(results),
         )
     except Exception as e:
+        sql_execution_time_ms = int((_time.monotonic() - query_start) * 1000)
         logger.error(
             "Q&A Query failed | Question: %s | SQL: %s | Error: %s",
             question,
             sql_query.replace("\n", " "),
             str(e),
         )
-        return f"❌ Ошибка выполнения запроса: {str(e)}"
+        return QAResult(
+            answer=f"❌ Ошибка выполнения запроса: {str(e)}",
+            success=False,
+            generated_sql=sql_query,
+            error_message=str(e),
+            sql_execution_time_ms=sql_execution_time_ms,
+            input_tokens=total_input,
+            output_tokens=total_output,
+        )
 
     # Step 3: Generate answer
     results_text = str(results) if results else "Нет данных"
@@ -202,8 +243,17 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> st
     )
 
     answer = answer_response.content[0].text
+    total_input += answer_response.usage.input_tokens
+    total_output += answer_response.usage.output_tokens
 
     # Store the exchange for future context
     store.add_exchange(user_id, question, sql_query, answer)
 
-    return answer
+    return QAResult(
+        answer=answer,
+        success=True,
+        generated_sql=sql_query,
+        sql_execution_time_ms=sql_execution_time_ms,
+        input_tokens=total_input,
+        output_tokens=total_output,
+    )
