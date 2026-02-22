@@ -115,7 +115,6 @@ async def help_command(message: Message) -> None:
         "Команды:\n"
         "/start - Получить Chat ID\n"
         "/report - Получить отчёт сейчас\n"
-        "/performance - Отчёт по успеваемости\n"
         "/activity - Отчёт по активности\n"
         "/clear - Сбросить контекст диалога\n"
         "/stat - Статистика использования (админ)\n"
@@ -235,30 +234,6 @@ async def stat_command(message: Message) -> None:
 
     except Exception as e:
         logger.exception("Error fetching stats: %s", e)
-        await message.answer(f"❌ Ошибка: {str(e)}")
-
-
-@router.message(Command("performance"))
-async def performance_command(message: Message) -> None:
-    """Handle /performance command - academic performance report."""
-    logger.info("performance_command called by user %s", message.from_user.id)
-
-    if not is_user_allowed(message.from_user.id):
-        await message.answer("⛔ Доступ запрещён.")
-        return
-
-    await message.answer("⏳ Генерирую отчёт по успеваемости...")
-
-    try:
-        from queries.performance import get_all_performance_metrics
-        from ai.insights import generate_performance_report
-
-        metrics = get_all_performance_metrics()
-        report = generate_performance_report(metrics)
-        await safe_reply(message, report)
-        logger.info("Performance report sent successfully")
-    except Exception as e:
-        logger.exception("Error generating performance report: %s", e)
         await message.answer(f"❌ Ошибка: {str(e)}")
 
 

@@ -111,62 +111,6 @@ def generate_daily_report(metrics: dict) -> str:
     return message.content[0].text
 
 
-PERFORMANCE_REPORT_PROMPT = """Ты аналитик образовательной платформы в России.
-
-Вот данные об академической успеваемости за {date}:
-
-📊 ОБЩАЯ СТАТИСТИКА:
-- Сегодня: {total_submissions} работ, средний балл {avg_score}%, медиана {median_score}%
-- Активных: {active_regions} регионов, {active_schools} школ, {active_students} учеников
-- Вчера: {total_submissions_yesterday} работ, средний балл {avg_score_yesterday}%
-
-📈 РАСПРЕДЕЛЕНИЕ БАЛЛОВ:
-{score_distribution}
-
-🏆 ТОП РЕГИОНОВ ПО УСПЕВАЕМОСТИ:
-{top_regions}
-
-📉 ОТСТАЮЩИЕ РЕГИОНЫ:
-{bottom_regions}
-
-📚 УСПЕВАЕМОСТЬ ПО ПРЕДМЕТАМ:
-{by_subject}
-
-🎓 УСПЕВАЕМОСТЬ ПО КЛАССАМ (параллелям):
-{by_parallel}
-
-Напиши краткий аналитический отчёт для Telegram (4-6 пунктов):
-1. Общая картина успеваемости и изменения по сравнению со вчера
-2. Распределение баллов — есть ли перекос
-3. Лучшие и отстающие регионы
-4. Какие предметы даются лучше/хуже
-5. Разница между классами
-6. Аномалии или важные наблюдения
-
-ВАЖНО: Всегда указывай точные даты.
-
-Формат:
-📊 **Успеваемость за {date}**
-[краткое резюме в 1-2 предложения]
-
-📈 **Распределение баллов**
-[анализ]
-
-🏆 **Лидеры и отстающие**
-[регионы]
-
-📚 **По предметам**
-[анализ]
-
-🎓 **По классам**
-[анализ]
-
-💡 **Наблюдение**
-[одна ключевая мысль]
-
-Пиши кратко и по делу. Используй emoji умеренно.
-"""
-
 ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной платформы в России.
 
 Вот данные об активности и вовлечённости за {date}:
@@ -233,67 +177,6 @@ ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной
 
 Пиши кратко и по делу. Используй emoji умеренно.
 """
-
-
-def generate_performance_report(metrics: dict) -> str:
-    """Generate academic performance report from metrics."""
-    overall = metrics.get("overall_today", {})
-    overall_yesterday = metrics.get("overall_yesterday", {})
-
-    # Format score distribution
-    dist_text = "\n".join(
-        f"  {d['score_range']}%: {d['cnt']} работ"
-        for d in metrics.get("score_distribution", [])
-    )
-
-    # Format top regions
-    top_text = "\n".join(
-        f"  {i+1}. {r['region']}: {r['avg_score']}% (n={r['submissions']})"
-        for i, r in enumerate(metrics.get("top_regions", []))
-    )
-
-    # Format bottom regions
-    bottom_text = "\n".join(
-        f"  {i+1}. {r['region']}: {r['avg_score']}% (n={r['submissions']})"
-        for i, r in enumerate(metrics.get("bottom_regions", []))
-    )
-
-    # Format by subject
-    subject_text = "\n".join(
-        f"  {s['subject']}: {s['avg_score']}% ({s['submissions']} работ)"
-        for s in metrics.get("by_subject", [])
-    )
-
-    # Format by parallel
-    parallel_text = "\n".join(
-        f"  {p['parallel']} класс: {p['avg_score']}% ({p['submissions']} работ)"
-        for p in metrics.get("by_parallel", [])
-    )
-
-    prompt = PERFORMANCE_REPORT_PROMPT.format(
-        date=metrics.get("date", ""),
-        total_submissions=overall.get("total_submissions", 0),
-        avg_score=overall.get("avg_score", 0),
-        median_score=overall.get("median_score", 0),
-        active_regions=overall.get("active_regions", 0),
-        active_schools=overall.get("active_schools", 0),
-        active_students=overall.get("active_students", 0),
-        total_submissions_yesterday=overall_yesterday.get("total_submissions", 0),
-        avg_score_yesterday=overall_yesterday.get("avg_score", 0),
-        score_distribution=dist_text or "  Нет данных",
-        top_regions=top_text or "  Нет данных",
-        bottom_regions=bottom_text or "  Нет данных",
-        by_subject=subject_text or "  Нет данных",
-        by_parallel=parallel_text or "  Нет данных",
-    )
-
-    message = _get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    return message.content[0].text
 
 
 def generate_activity_report(metrics: dict) -> str:
