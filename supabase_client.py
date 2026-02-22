@@ -56,3 +56,19 @@ def log_qa_exchange(
         logger.info("Q&A exchange logged to Supabase for user %s", telegram_user_id)
     except Exception as e:
         logger.warning("Failed to log Q&A exchange to Supabase: %s", e)
+
+
+def get_qa_stats(since_iso: str | None = None) -> list[dict]:
+    """Fetch qa_logs rows, optionally filtered by created_at >= since_iso."""
+    client = _get_client()
+    if client is None:
+        return []
+
+    query = client.table("qa_logs").select(
+        "telegram_user_id, telegram_username, input_tokens, output_tokens"
+    )
+    if since_iso is not None:
+        query = query.gte("created_at", since_iso)
+
+    response = query.execute()
+    return response.data
