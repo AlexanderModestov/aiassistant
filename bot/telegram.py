@@ -114,8 +114,7 @@ async def help_command(message: Message) -> None:
         "📊 *AI Analyst Bot*\n\n"
         "Команды:\n"
         "/start - Получить Chat ID\n"
-        "/report - Получить отчёт сейчас\n"
-        "/activity - Отчёт по активности\n"
+        "/report - Отчёт по активности\n"
         "/clear - Сбросить контекст диалога\n"
         "/stat - Статистика использования (админ)\n"
         "/help - Эта справка\n\n"
@@ -237,10 +236,10 @@ async def stat_command(message: Message) -> None:
         await message.answer(f"❌ Ошибка: {str(e)}")
 
 
-@router.message(Command("activity"))
-async def activity_command(message: Message) -> None:
-    """Handle /activity command - activity/engagement report."""
-    logger.info("activity_command called by user %s", message.from_user.id)
+@router.message(Command("report"))
+async def report_command(message: Message) -> None:
+    """Handle /report command - generate activity report on demand."""
+    logger.info("report_command called by user %s", message.from_user.id)
 
     if not is_user_allowed(message.from_user.id):
         await message.answer("⛔ Доступ запрещён.")
@@ -256,38 +255,6 @@ async def activity_command(message: Message) -> None:
         report = generate_activity_report(metrics)
         await safe_reply(message, report)
         logger.info("Activity report sent successfully")
-    except Exception as e:
-        logger.exception("Error generating activity report: %s", e)
-        await message.answer(f"❌ Ошибка: {str(e)}")
-
-
-@router.message(Command("report"))
-async def report_command(message: Message) -> None:
-    """Handle /report command - generate report on demand."""
-    logger.info("report_command called by user %s", message.from_user.id)
-
-    if not is_user_allowed(message.from_user.id):
-        logger.warning("User %s not allowed", message.from_user.id)
-        await message.answer("⛔ Доступ запрещён.")
-        return
-
-    await message.answer("⏳ Генерирую отчёт...")
-    logger.info("Fetching metrics...")
-
-    try:
-        from queries.growth import get_all_daily_metrics
-        from ai.insights import generate_daily_report
-
-        logger.info("Calling get_all_daily_metrics...")
-        metrics = get_all_daily_metrics()
-        logger.info("Metrics received: %s", list(metrics.keys()))
-
-        logger.info("Generating report with AI...")
-        report = generate_daily_report(metrics)
-        logger.info("Report generated, length: %d chars", len(report))
-
-        await safe_reply(message, report)
-        logger.info("Report sent successfully")
     except Exception as e:
         logger.exception("Error generating report: %s", e)
         await message.answer(f"❌ Ошибка: {str(e)}")
