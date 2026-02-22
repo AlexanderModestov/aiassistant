@@ -206,7 +206,14 @@ async def stat_command(message: Message) -> None:
         period_text = f"за {days} дн." if days > 0 else "за всё время"
         lines = [f"📊 *Статистика использования* ({period_text})\n"]
 
+        total_count = 0
+        total_input = 0
+        total_output = 0
+
         for u in sorted_users:
+            total_count += u["count"]
+            total_input += u["input_tokens"]
+            total_output += u["output_tokens"]
             questions_list = "\n".join(
                 f"   • {q}" for q in u["questions"]
             )
@@ -216,6 +223,11 @@ async def stat_command(message: Message) -> None:
                 f"{questions_list}\n"
                 f"   Токены (входящие/исходящие): {u['input_tokens']:,} / {u['output_tokens']:,}\n"
             )
+
+        lines.append(
+            f"📈 *Итого:* {total_count} запросов, "
+            f"токены: {total_input:,} / {total_output:,}"
+        )
 
         await safe_reply(message, "\n".join(lines))
 
