@@ -186,10 +186,14 @@ async def stat_command(message: Message) -> None:
                     "count": 0,
                     "input_tokens": 0,
                     "output_tokens": 0,
+                    "questions": [],
                 }
             user_stats[uid]["count"] += 1
             user_stats[uid]["input_tokens"] += row.get("input_tokens") or 0
             user_stats[uid]["output_tokens"] += row.get("output_tokens") or 0
+            q = row.get("question")
+            if q:
+                user_stats[uid]["questions"].append(q)
 
         # Sort by total tokens descending
         sorted_users = sorted(
@@ -202,28 +206,16 @@ async def stat_command(message: Message) -> None:
         period_text = f"за {days} дн." if days > 0 else "за всё время"
         lines = [f"📊 *Статистика использования* ({period_text})\n"]
 
-        total_requests = 0
-        total_input = 0
-        total_output = 0
-
         for u in sorted_users:
-            total = u["input_tokens"] + u["output_tokens"]
-            total_requests += u["count"]
-            total_input += u["input_tokens"]
-            total_output += u["output_tokens"]
+            questions_list = "\n".join(
+                f"   • {q}" for q in u["questions"]
+            )
             lines.append(
                 f"👤 *{u['username']}*\n"
                 f"   Запросов: {u['count']}\n"
-                f"   Токены: {u['input_tokens']:,} вх / "
-                f"{u['output_tokens']:,} вых / {total:,} всего\n"
+                f"{questions_list}\n"
+                f"   Токены (входящие/исходящие): {u['input_tokens']:,} / {u['output_tokens']:,}\n"
             )
-
-        grand_total = total_input + total_output
-        lines.append(
-            f"---\n"
-            f"*Итого:* {total_requests} запросов, "
-            f"{total_input:,} вх / {total_output:,} вых / {grand_total:,} токенов"
-        )
 
         await safe_reply(message, "\n".join(lines))
 

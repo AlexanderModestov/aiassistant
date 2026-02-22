@@ -65,7 +65,7 @@ def get_qa_stats(since_iso: str | None = None) -> list[dict]:
         return []
 
     query = client.table("qa_logs").select(
-        "telegram_user_id, telegram_username, input_tokens, output_tokens"
+        "telegram_user_id, telegram_username, question, input_tokens, output_tokens"
     )
     if since_iso is not None:
         query = query.gte("created_at", since_iso)
