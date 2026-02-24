@@ -37,11 +37,8 @@ ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной
 - Эта неделя ({this_week_dates}): {this_week_submissions} работ, {this_week_schools} школ, {this_week_students} учеников
 - Прошлая неделя ({last_week_dates}): {last_week_submissions} работ, {last_week_schools} школ, {last_week_students} учеников
 
-🎓 ПО КЛАССАМ (параллелям):
-{by_parallel}
-
-📝 ПО ТИПАМ РАБОТ:
-{by_work_type}
+🏫 ТОП ШКОЛ ПО АКТИВНОСТИ:
+{top_schools}
 
 🏆 ТОП РЕГИОНОВ ПО АКТИВНОСТИ:
 {top_regions}
@@ -52,10 +49,9 @@ ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной
 Напиши краткий аналитический отчёт для Telegram (4-6 пунктов):
 1. Динамика активности по сравнению со вчера и прошлой неделей
 2. Тренд за неделю — рост или падение
-3. Какие классы наиболее активны
-4. Популярные типы работ
-5. Самые активные регионы
-6. Аномалии или важные наблюдения
+3. Самые активные школы
+4. Самые активные регионы
+5. Аномалии или важные наблюдения
 
 ВАЖНО: Всегда указывай точные даты.
 
@@ -69,8 +65,8 @@ ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной
 📅 **Тренд недели**
 [анализ по дням]
 
-🎓 **По классам и типам**
-[анализ]
+🏫 **Топ школы**
+[список]
 
 🏆 **Топ регионы**
 [список]
@@ -96,16 +92,10 @@ def generate_activity_report(metrics: dict) -> str:
         for d in metrics.get("weekly_trend", [])
     )
 
-    # Format by parallel
-    parallel_text = "\n".join(
-        f"  {p['parallel']} класс: {p['submissions']} работ, {p['students']} учеников"
-        for p in metrics.get("by_parallel", [])
-    )
-
-    # Format by work type
-    wt_text = "\n".join(
-        f"  {w['work_type']}: {w['submissions']} работ (ср. балл {w['avg_score']}%)"
-        for w in metrics.get("by_work_type", [])
+    # Format top schools
+    schools_text = "\n".join(
+        f"  {i+1}. {s['school']} ({s['region']}): {s['submissions']} работ, {s['students']} учеников"
+        for i, s in enumerate(metrics.get("top_schools", []))
     )
 
     # Format top regions
@@ -142,8 +132,7 @@ def generate_activity_report(metrics: dict) -> str:
         last_week_submissions=last_week.get("submissions", 0),
         last_week_schools=last_week.get("active_schools", 0),
         last_week_students=last_week.get("active_students", 0),
-        by_parallel=parallel_text or "  Нет данных",
-        by_work_type=wt_text or "  Нет данных",
+        top_schools=schools_text or "  Нет данных",
         top_regions=regions_text or "  Нет данных",
         status_breakdown=status_text or "  Нет данных",
     )

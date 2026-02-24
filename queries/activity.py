@@ -105,6 +105,24 @@ def get_top_active_regions(target_date: date, limit: int = 10) -> list[dict]:
     return execute_query(query)
 
 
+def get_top_active_schools(target_date: date, limit: int = 10) -> list[dict]:
+    """Top schools by submission count for a specific date."""
+    query = f"""
+    SELECT
+        school,
+        region,
+        count() as submissions,
+        count(DISTINCT student_id) as students
+    FROM work_results_n
+    WHERE toDate(submission_date) = '{target_date}'
+      AND school != ''
+    GROUP BY school, region
+    ORDER BY submissions DESC
+    LIMIT {limit}
+    """
+    return execute_query(query)
+
+
 def get_status_breakdown(target_date: date) -> list[dict]:
     """Submission status breakdown for a specific date."""
     query = f"""
@@ -179,6 +197,7 @@ def get_all_activity_metrics(target_date: date = None) -> dict:
         "weekly_comparison": get_weekly_comparison(target_date),
         "by_parallel": get_submissions_by_parallel(target_date),
         "by_work_type": get_submissions_by_work_type(target_date),
+        "top_schools": get_top_active_schools(target_date),
         "top_regions": get_top_active_regions(target_date),
         "status_breakdown": get_status_breakdown(target_date),
     }
