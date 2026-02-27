@@ -46,3 +46,21 @@ class KnowledgeStore:
     def format_alias_hint(self, alias: dict) -> str:
         """Format alias as a hint for the system prompt."""
         return f'Подсказка: "{alias["alias"]}" = "{alias["canonical_name"]}" в базе данных.'
+
+
+# --- Module-level singleton ---
+
+_store = KnowledgeStore()
+
+
+def get_store() -> KnowledgeStore:
+    """Get the global KnowledgeStore instance."""
+    return _store
+
+
+def refresh_store() -> None:
+    """Reload rules and aliases from Supabase into the global store."""
+    from supabase_client import get_approved_rules, get_approved_aliases
+    rules = get_approved_rules()
+    aliases = get_approved_aliases()
+    _store.load(rules, aliases)
