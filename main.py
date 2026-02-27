@@ -46,6 +46,11 @@ async def main() -> None:
     bot = create_bot()
     dp = create_dispatcher()
 
+    # Load knowledge store
+    from knowledge.store import refresh_store
+    refresh_store()
+    logger.info("Knowledge store loaded")
+
     # Set up scheduler
     scheduler = AsyncIOScheduler(timezone=pytz.timezone(timezone))
     scheduler.add_job(

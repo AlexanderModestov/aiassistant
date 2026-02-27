@@ -8,6 +8,7 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from conversation import ConversationStore
+from bot.admin import admin_router, notify_admin_new_rule
 
 load_dotenv()
 
@@ -117,6 +118,7 @@ async def help_command(message: Message) -> None:
         "/report - Отчёт по активности\n"
         "/clear - Сбросить контекст диалога\n"
         "/stat - Статистика использования (админ)\n"
+        "/rules - Активные правила базы знаний (админ)\n"
         "/help - Эта справка\n\n"
         "Также вы можете задать вопрос о данных в свободной форме.\n"
         "Бот помнит контекст диалога для уточняющих вопросов.",
@@ -260,6 +262,33 @@ async def report_command(message: Message) -> None:
         await message.answer(f"❌ Ошибка: {str(e)}")
 
 
+@router.message(Command("rules"))
+async def rules_command(message: Message) -> None:
+    """Handle /rules command - show active knowledge rules (admin only)."""
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Доступ запрещён. Команда доступна только администраторам.")
+        return
+
+    from knowledge.store import get_store
+    store = get_store()
+
+    if not store._rules and not store._aliases:
+        await message.answer("📋 База знаний пуста.")
+        return
+
+    lines = ["📋 *Активные правила:*\n"]
+    for i, rule in enumerate(store._rules, 1):
+        kw = ", ".join(rule.get("keywords", []))
+        lines.append(f"{i}. {rule['rule_text']}\n   Ключевые слова: _{kw}_\n")
+
+    if store._aliases:
+        lines.append("\n📋 *Алиасы названий:*\n")
+        for alias in store._aliases:
+            lines.append(f"• _{alias['alias']}_ → {alias['canonical_name']}")
+
+    await safe_reply(message, "\n".join(lines))
+
+
 @router.message(F.text)
 async def handle_message(message: Message) -> None:
     """Handle free-form questions."""
@@ -289,6 +318,12 @@ async def handle_message(message: Message) -> None:
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
         )
+
+        # Notify admins if a rule was proposed
+        if result.proposed_rule and ADMIN_USERS:
+            await notify_admin_new_rule(
+                message.bot, ADMIN_USERS, result.proposed_rule,
+            )
     except Exception as e:
         logger.exception("Error answering question")
         await message.answer(f"❌ Ошибка: {str(e)}")
@@ -304,5 +339,6 @@ def create_bot() -> Bot:
 def create_dispatcher() -> Dispatcher:
     """Create and configure the dispatcher."""
     dp = Dispatcher()
+    dp.include_router(admin_router)  # Admin router first (handles callbacks)
     dp.include_router(router)
     return dp
