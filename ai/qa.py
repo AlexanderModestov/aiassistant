@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 from anthropic import Anthropic
 from queries.base import execute_query
 from conversation import ConversationStore
+from knowledge.store import get_store
+from knowledge.extractor import extract_rule
+from knowledge.resolver import resolve_names
 
 load_dotenv()
 
@@ -100,6 +103,10 @@ SQL_SYSTEM_PROMPT = """Ты SQL-эксперт для аналитики обр�
 
 {examples}
 
+{knowledge_rules}
+
+{alias_hints}
+
 ## Правила
 - Только SELECT (никаких INSERT/UPDATE/DELETE/DROP)
 - Сегодня: {today}
@@ -127,6 +134,7 @@ class QAResult:
     sql_execution_time_ms: int | None = None
     input_tokens: int = 0
     output_tokens: int = 0
+    proposed_rule: dict | None = None
 
 
 def _build_sql_messages(exchanges: list[dict], question: str) -> list[dict]:
@@ -153,10 +161,19 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> QA
     """Answer a user question about the data with conversation context."""
     exchanges = store.get_exchanges(user_id)
 
+    # --- Knowledge integration ---
+    knowledge_store = get_store()
+    matched_rules = knowledge_store.find_rules(question)
+    rules_text = knowledge_store.format_rules_for_prompt(matched_rules)
+    resolution = resolve_names(question, knowledge_store)
+    alias_hint = resolution["hint"]
+
     # Step 1: Generate SQL query
     sql_system = SQL_SYSTEM_PROMPT.format(
         schema=DATABASE_SCHEMA,
         examples=SQL_EXAMPLES,
+        knowledge_rules=rules_text,
+        alias_hints=alias_hint,
         today=date.today(),
     )
     sql_messages = _build_sql_messages(exchanges, question)
@@ -248,6 +265,37 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> QA
 
     # Store the exchange for future context
     store.add_exchange(user_id, question, sql_query, answer)
+
+    # Step 4: Check for correction pattern (only on 2nd+ exchange)
+    if len(exchanges) >= 1:
+        prev = exchanges[-1]
+        try:
+            rule_data = extract_rule(
+                question1=prev["question"], sql1=prev["sql"],
+                question2=question, sql2=sql_query,
+            )
+            if rule_data:
+                from supabase_client import insert_knowledge_rule
+                inserted = insert_knowledge_rule(
+                    category=rule_data["category"],
+                    rule_text=rule_data["rule_text"],
+                    keywords=rule_data["keywords"],
+                    source_question=prev["question"],
+                    source_correction=question,
+                    created_by=user_id,
+                )
+                if inserted:
+                    return QAResult(
+                        answer=answer,
+                        success=True,
+                        generated_sql=sql_query,
+                        sql_execution_time_ms=sql_execution_time_ms,
+                        input_tokens=total_input,
+                        output_tokens=total_output,
+                        proposed_rule=inserted,
+                    )
+        except Exception as e:
+            logger.warning("Rule extraction step failed: %s", e)
 
     return QAResult(
         answer=answer,
