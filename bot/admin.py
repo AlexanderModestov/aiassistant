@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 
 admin_router = Router()
 
+
+async def _safe_edit(message, text: str) -> None:
+    """Edit message with Markdown, fallback to plain text."""
+    try:
+        await message.edit_text(text, parse_mode=ParseMode.MARKDOWN)
+    except Exception:
+        await message.edit_text(text, parse_mode=None)
+
 # Temporary storage for rules awaiting edit (admin_user_id -> rule_id)
 _pending_edits: dict[int, int] = {}
 
@@ -87,10 +95,7 @@ async def handle_rule_approve(callback: CallbackQuery) -> None:
     success = update_rule_status(rule_id, "approved", approved_by=callback.from_user.id)
 
     if success:
-        await callback.message.edit_text(
-            callback.message.text + "\n\n\u2705 *Одобрено*",
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        await _safe_edit(callback.message, callback.message.text + "\n\n\u2705 Одобрено")
         from knowledge.store import refresh_store
         refresh_store()
     else:
@@ -110,10 +115,7 @@ async def handle_rule_reject(callback: CallbackQuery) -> None:
     success = update_rule_status(rule_id, "rejected")
 
     if success:
-        await callback.message.edit_text(
-            callback.message.text + "\n\n\u274c *Отклонено*",
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        await _safe_edit(callback.message, callback.message.text + "\n\n\u274c Отклонено")
     else:
         await callback.answer("\u274c Ошибка сохранения", show_alert=True)
     await callback.answer()
@@ -135,12 +137,12 @@ async def handle_rule_edit(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@admin_router.message(F.text & ~F.text.startswith("/"))
+@admin_router.message(F.text & ~F.text.startswith("/"), lambda msg: msg.from_user.id in _pending_edits)
 async def handle_rule_edit_text(message: Message) -> None:
     """Catch admin's edited rule text if they have a pending edit."""
     from bot.telegram import is_admin
     user_id = message.from_user.id
-    if user_id not in _pending_edits or not is_admin(user_id):
+    if not is_admin(user_id):
         return
 
     rule_id = _pending_edits.pop(user_id)
@@ -168,10 +170,7 @@ async def handle_alias_approve(callback: CallbackQuery) -> None:
     success = update_alias_status(alias_id, "approved")
 
     if success:
-        await callback.message.edit_text(
-            callback.message.text + "\n\n\u2705 *Одобрено*",
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        await _safe_edit(callback.message, callback.message.text + "\n\n\u2705 Одобрено")
         from knowledge.store import refresh_store
         refresh_store()
     else:
@@ -191,10 +190,7 @@ async def handle_alias_reject(callback: CallbackQuery) -> None:
     success = update_alias_status(alias_id, "rejected")
 
     if success:
-        await callback.message.edit_text(
-            callback.message.text + "\n\n\u274c *Отклонено*",
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        await _safe_edit(callback.message, callback.message.text + "\n\n\u274c Отклонено")
     else:
         await callback.answer("\u274c Ошибка сохранения", show_alert=True)
     await callback.answer()

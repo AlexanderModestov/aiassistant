@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
@@ -303,7 +304,7 @@ async def handle_message(message: Message) -> None:
         from ai.qa import answer_question
         from supabase_client import log_qa_exchange
 
-        result = answer_question(question, message.from_user.id, conversation_store)
+        result = await asyncio.to_thread(answer_question, question, message.from_user.id, conversation_store)
         await safe_reply(message, result.answer)
 
         log_qa_exchange(
