@@ -231,8 +231,20 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> QA
             output_tokens=total_output,
         )
 
-    # Step 3: Generate answer
-    results_text = str(results) if results else "Нет данных"
+    # Step 3: Generate answer (truncate large result sets to stay within token limits)
+    MAX_ROWS = 100
+    if not results:
+        results_text = "Нет данных"
+    elif len(results) > MAX_ROWS:
+        results_text = (
+            str(results[:MAX_ROWS])
+            + f"\n... (показано {MAX_ROWS} из {len(results)} строк)"
+        )
+    else:
+        results_text = str(results)
+    # Hard cap on character length (~50K chars ≈ ~15K tokens)
+    if len(results_text) > 50_000:
+        results_text = results_text[:50_000] + "\n... (результат обрезан)"
     answer_messages = _build_answer_messages(exchanges, question, results_text)
 
     answer_response = _get_client().messages.create(

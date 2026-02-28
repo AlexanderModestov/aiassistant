@@ -49,13 +49,35 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_USERS
 
 
+def _split_message(text: str, limit: int = 4096) -> list[str]:
+    """Split text into chunks that fit Telegram's message limit."""
+    if len(text) <= limit:
+        return [text]
+    chunks = []
+    while text:
+        if len(text) <= limit:
+            chunks.append(text)
+            break
+        # Try to split at last newline within limit
+        cut = text.rfind("\n", 0, limit)
+        if cut <= 0:
+            cut = limit
+        chunks.append(text[:cut])
+        text = text[cut:].lstrip("\n")
+    return chunks
+
+
 async def safe_reply(message: Message, text: str) -> None:
-    """Send message with Markdown, fallback to plain text if parsing fails."""
-    try:
-        await message.answer(text, parse_mode=ParseMode.MARKDOWN)
-    except Exception as e:
-        logger.warning("Failed to send with Markdown: %s", e)
-        await message.answer(text, parse_mode=None)
+    """Send message with Markdown, fallback to plain text if parsing fails.
+
+    Splits long messages into multiple chunks to stay within Telegram's limit.
+    """
+    for chunk in _split_message(text):
+        try:
+            await message.answer(chunk, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            logger.warning("Failed to send with Markdown: %s", e)
+            await message.answer(chunk, parse_mode=None)
 
 
 async def send_report(bot: Bot, report: str) -> None:
@@ -65,19 +87,21 @@ async def send_report(bot: Bot, report: str) -> None:
         return
 
     for chat_id in CHAT_IDS:
-        try:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=report,
-                parse_mode=ParseMode.MARKDOWN,
-            )
-            logger.info("Report sent to chat %s", chat_id)
-        except Exception as e:
-            if "parse" in str(e).lower():
-                logger.warning("Markdown parsing failed for chat %s, sending as plain text", chat_id)
-                await bot.send_message(chat_id=chat_id, text=report, parse_mode=None)
-            else:
-                logger.error("Failed to send report to chat %s: %s", chat_id, e)
+        for chunk in _split_message(report):
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=chunk,
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except Exception as e:
+                if "parse" in str(e).lower():
+                    logger.warning("Markdown parsing failed for chat %s, sending as plain text", chat_id)
+                    await bot.send_message(chat_id=chat_id, text=chunk, parse_mode=None)
+                else:
+                    logger.error("Failed to send report to chat %s: %s", chat_id, e)
+                    break
+        logger.info("Report sent to chat %s", chat_id)
 
 
 @router.message(Command("start"))
