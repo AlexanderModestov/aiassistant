@@ -202,6 +202,10 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> QA
             output_tokens=total_output,
         )
 
+    # Auto-add LIMIT to prevent huge result sets
+    if "LIMIT" not in sql_upper:
+        sql_query = sql_query.rstrip(";") + " LIMIT 100"
+
     # Step 2: Execute query
     query_start = _time.monotonic()
     try:
