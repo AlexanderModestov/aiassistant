@@ -139,10 +139,14 @@ def get_status_breakdown(target_date: date) -> list[dict]:
 
 
 def get_weekly_comparison(target_date: date) -> dict:
-    """Compare this week vs last week submission metrics."""
+    """Compare this week vs equivalent days of last week.
+
+    If target_date is Wednesday, compares Mon-Wed this week
+    with Mon-Wed last week (not the full last week).
+    """
     this_week_start = target_date - timedelta(days=target_date.weekday())
     last_week_start = this_week_start - timedelta(days=7)
-    last_week_end = this_week_start - timedelta(days=1)
+    last_week_end = target_date - timedelta(days=7)
 
     query = f"""
     SELECT

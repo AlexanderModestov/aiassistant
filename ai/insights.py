@@ -33,7 +33,7 @@ ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной
 📈 ТРЕНД ЗА НЕДЕЛЮ (по дням):
 {weekly_trend}
 
-📈 НЕДЕЛЯ vs ПРОШЛАЯ НЕДЕЛЯ:
+📈 НЕДЕЛЯ vs ПРОШЛАЯ НЕДЕЛЯ (сравнение за эквивалентный период — одинаковые дни недели):
 - Эта неделя ({this_week_dates}): {this_week_submissions} работ, {this_week_schools} школ, {this_week_students} учеников
 - Прошлая неделя ({last_week_dates}): {last_week_submissions} работ, {last_week_schools} школ, {last_week_students} учеников
 
