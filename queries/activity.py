@@ -39,8 +39,8 @@ def get_daily_activity(target_date: date) -> dict:
 
 
 def get_weekly_submission_trend(target_date: date) -> list[dict]:
-    """Daily submission counts for the last 7 days."""
-    start = target_date - timedelta(days=6)
+    """Daily submission counts for the current week (from Monday)."""
+    start = target_date - timedelta(days=target_date.weekday())
     query = f"""
     SELECT
         toDate(submission_date) as day,
