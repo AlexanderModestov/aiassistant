@@ -1,18 +1,4 @@
-import os
-from dotenv import load_dotenv
-from anthropic import Anthropic
-
-load_dotenv()
-
-_client = None
-
-
-def _get_client() -> Anthropic:
-    """Lazy initialization of Anthropic client."""
-    global _client
-    if _client is None:
-        _client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    return _client
+from ai.client import chat
 
 ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной платформы в России.
 
@@ -137,10 +123,5 @@ def generate_activity_report(metrics: dict) -> str:
         status_breakdown=status_text or "  Нет данных",
     )
 
-    message = _get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    return message.content[0].text
+    response = chat(messages=[{"role": "user", "content": prompt}])
+    return response.text

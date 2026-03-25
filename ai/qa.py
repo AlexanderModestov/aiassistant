@@ -1,26 +1,12 @@
-import os
 import logging
 import time as _time
 from dataclasses import dataclass
 from datetime import date
-from dotenv import load_dotenv
-from anthropic import Anthropic
 from queries.base import execute_query
 from conversation import ConversationStore
-
-load_dotenv()
+from ai.client import chat
 
 logger = logging.getLogger(__name__)
-
-_client = None
-
-
-def _get_client() -> Anthropic:
-    """Lazy initialization of Anthropic client."""
-    global _client
-    if _client is None:
-        _client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    return _client
 
 DATABASE_SCHEMA = """
 ## Таблица work_results_n — Результаты работ
@@ -162,16 +148,11 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> QA
     )
     sql_messages = _build_sql_messages(exchanges, question)
 
-    query_response = _get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=500,
-        system=sql_system,
-        messages=sql_messages,
-    )
+    query_response = chat(messages=sql_messages, system=sql_system, max_tokens=500)
 
-    sql_query = query_response.content[0].text.strip()
-    total_input = query_response.usage.input_tokens
-    total_output = query_response.usage.output_tokens
+    sql_query = query_response.text.strip()
+    total_input = query_response.input_tokens
+    total_output = query_response.output_tokens
 
     # Clean up query (remove markdown code blocks if present)
     if sql_query.startswith("```"):
@@ -252,16 +233,11 @@ def answer_question(question: str, user_id: int, store: ConversationStore) -> QA
         results_text = results_text[:50_000] + "\n... (результат обрезан)"
     answer_messages = _build_answer_messages(exchanges, question, results_text)
 
-    answer_response = _get_client().messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        system=ANSWER_SYSTEM_PROMPT,
-        messages=answer_messages,
-    )
+    answer_response = chat(messages=answer_messages, system=ANSWER_SYSTEM_PROMPT)
 
-    answer = answer_response.content[0].text
-    total_input += answer_response.usage.input_tokens
-    total_output += answer_response.usage.output_tokens
+    answer = answer_response.text
+    total_input += answer_response.input_tokens
+    total_output += answer_response.output_tokens
 
     # Store the exchange for future context
     store.add_exchange(user_id, question, sql_query, answer)
