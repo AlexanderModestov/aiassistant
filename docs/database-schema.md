@@ -10,232 +10,236 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    СПРАВОЧНИКИ / АГРЕГАТЫ                   │
+│                       ФАКТ-ТАБЛИЦА                          │
 ├─────────────────────────────────────────────────────────────┤
-│  school_stats          │  school_stats_mv                   │
-│  parallel_reg_stats    │  parallel_reg_mv                   │
+│  oblakoz_sending       │  Отправки работ (sending events)   │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       ФАКТ-ТАБЛИЦЫ                          │
-├─────────────────────────────────────────────────────────────┤
-│  school_work           │  Учебная активность (просмотры)    │
-│  work_results_n        │  Результаты работ (основная)       │
-│  work_results_06       │  Результаты работ (архив)          │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      CRM-КОНТУР                             │
-├─────────────────────────────────────────────────────────────┤
-│  company_crm           │  Финансовые транзакции             │
-└─────────────────────────────────────────────────────────────┘
+        │                              │
+        │ school_id                    │ id
+        ▼                              ▼
+┌──────────────────────┐    ┌─────────────────────────────┐
+│   oblakoz_school     │    │   oblakoz_sending_module    │
+│   (справочник школ)  │    │   sending_id → module       │
+└──────────────────────┘    └──────────────┬──────────────┘
+                                           │ module
+                                           ▼
+                            ┌─────────────────────────────┐
+                            │   oblakoz_content_module    │
+                            │   content_id → module       │
+                            └──────────────┬──────────────┘
+                                           │ content_id
+                                           ▼
+                            ┌─────────────────────────────┐
+                            │   oblakoz_content           │
+                            │   (метаданные работ)        │
+                            └─────────────────────────────┘
 ```
 
 ---
 
 ## Tables Overview
 
-| Table | Description | Row Count | Доступна для запросов |
-|-------|-------------|-----------|----------------------|
-| `school_work` | Учебная активность (просмотры) | 567,937 | ✅ Да |
-| `work_results_n` | Результаты работ (основная) | 1,372,247 | ✅ Да |
-| `work_results_06` | Результаты работ (архив) | 91,349 | ✅ Да |
-| `company_crm` | CRM данные и транзакции | 7,637 | ✅ Да |
-| `school_stats` | Агрегат по школам | - | ❌ AggregatingMergeTree |
-| `school_stats_mv` | MV по школам | - | ❌ AggregatingMergeTree |
-| `parallel_reg_stats` | Агрегат по параллелям | - | ❌ AggregatingMergeTree |
-| `parallel_reg_mv` | MV по параллелям | - | ❌ AggregatingMergeTree |
-
-> **Примечание:** Таблицы с `AggregatingMergeTree` используют агрегатные функции и не подходят для прямых запросов через text-to-sql.
+| Table | Description | Доступна для запросов |
+|-------|-------------|----------------------|
+| `oblakoz_sending` | Отправки / выполнения работ | ✅ Да |
+| `oblakoz_school` | Справочник школ | ✅ Да |
+| `oblakoz_content` | Метаданные контента (работ) | ✅ Да |
+| `oblakoz_sending_module` | Связь отправка ↔ модуль | ✅ Да |
+| `oblakoz_content_module` | Связь контент ↔ модуль | ✅ Да |
 
 ---
 
-## Факт-таблицы
+## Факт-таблица
 
-### Table: `school_work`
+### Table: `oblakoz_sending`
 
-Учебная активность — просмотры по ученикам и учителям.
-
-**Date Range:** 2026-01-01 to present
+Отправки выполненных работ (один ряд = одна выполненная работа учеником).
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `date` | Date | Дата события |
-| `direction` | String | Направление обучения |
-| `role` | String | Роль пользователя |
-| `region` | String | Регион РФ |
-| `municipality` | String | Муниципалитет |
-| `school` | String | Название школы |
-| `class` | String | Класс |
-| `supplier` | String | Поставщик/платформа |
-| `subject` | String | Предмет |
-| `total_view` | UInt32 | Количество просмотров |
-
-**Role Values:**
-- `Ученик` — Student
-- `Учитель` — Teacher
-
----
-
-### Table: `work_results_n`
-
-Результаты выполнения работ учениками (основная таблица).
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UInt64 | Уникальный идентификатор |
-| `region` | String | Регион |
-| `district` | String | Район |
-| `school` | String | Школа |
-| `class` | String | Класс |
-| `class_teacher` | String | Классный руководитель |
-| `student_id` | String | ID ученика |
-| `student_full_name` | String | ФИО ученика |
-| `role` | String | Роль |
-| `subject` | String | Предмет |
-| `parallel` | String | Параллель (5, 6, 7, 8, 9, 10, 11) |
-| `level` | String | Уровень сложности |
-| `work_name` | String | Название работы |
-| `work_id` | String | ID работы |
-| `work_type` | String | Тип работы |
-| `tasks_count` | UInt32 | Количество заданий |
-| `result_percent` | UInt32 | Процент выполнения (0-100) |
-| `time_spent` | UInt32 | Время выполнения (секунды) |
-| `labor_intensity` | UInt32 | Трудоёмкость |
-| `submission_date` | Nullable(String) | Дата сдачи (YYYY-MM-DD) |
+| `id` | UInt32 | Уникальный ID отправки |
+| `registration` | String | ID регистрации |
+| `user_id` | String | ID пользователя (ученика) |
+| `role` | String | Роль (Ученик / Учитель) |
+| `school_id` | UInt32 | FK → `oblakoz_school.id` |
+| `grade` | String | Параллель/класс ученика (5, 6, 7, ...) |
+| `order_id` | String | ID заказа |
+| `result` | UInt32 | Процент выполнения (0–100) |
+| `duration` | UInt32 | Время выполнения (секунды) |
 | `start_date` | Nullable(Date) | Дата начала |
 | `start_time` | Nullable(String) | Время начала |
-| `end_date` | Nullable(Date) | Дата окончания |
-| `status` | String | Статус |
-| `id_registration` | String | ID регистрации |
-| `id_order` | String | ID заказа |
-| `inn` | String | ИНН школы |
+| `end_date` | Nullable(Date) | Дата окончания (используется как «дата сдачи») |
+| `end_time` | Nullable(String) | Время окончания |
 
-**Work Types:**
-- `Самостоятельная работа` — Independent work
-- `КИМ` — Control measurement materials
-- `Интерактивная презентация` — Interactive presentation
-- `Лабораторная работа` — Laboratory work
-- `Опорный конспект` — Reference notes
-
-**Status Values:**
-- `Отправлено` — Submitted
-- `На согласовании` — Under review
-- `Подозрительно` — Suspicious
-- `Отказ` — Rejected
+> **Важно:** «Дата сдачи работы» в новой схеме = `end_date`. Это `Nullable(Date)`, сравнивать можно напрямую (`end_date = '2026-05-01'`).
 
 ---
 
-### Table: `work_results_06`
+## Справочники
 
-Исторические результаты работ (архивный срез).
-
-Структура идентична `work_results_n`, но с non-nullable датами.
-Используется для исторических/архивных данных.
-
----
-
-## CRM-контур
-
-### Table: `company_crm`
-
-CRM данные — транзакции и этапы сделок.
+### Table: `oblakoz_school`
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | UInt32 | Уникальный ID |
-| `inn` | String | ИНН клиента |
-| `title` | String | Название компании/школы |
-| `name_transaction` | String | Название транзакции |
-| `stage_transaction` | String | Этап сделки |
-| `sum` | Float64 | Сумма сделки |
-| `comment` | String | Комментарий |
-| `reg_operator` | String | Ответственный оператор |
-| `uploaded_at` | DateTime | Дата загрузки |
+| `id` | UInt32 | ID школы |
+| `inn` | String | ИНН |
+| `name` | String | Название школы |
+| `region` | String | Регион |
+| `municipality` | String | Муниципалитет |
 
-**Transaction Stages:**
-- `Новая` — New
-- `Отправить КП` — Send commercial offer
-- `ВКС` — Video conference
-- `Ждем активности` — Waiting for activity
-- `Изучают материалы` — Studying materials
-- `Недозвон ЦОК` — No answer
-- `Отказ` — Rejected
-- `Партнеры` — Partners
-- `Малочисленные школы` — Small schools
-- `База на обзвон` — Call list
+### Table: `oblakoz_content`
+
+Метаданные контента (работ/курсов).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UInt32 | ID контента |
+| `title` | String | Название работы |
+| `tasks_amount` | UInt32 | Количество заданий |
+| `duration` | UInt32 | Длительность |
+| `genre` | String | Жанр / тип контента |
+| `subject` | String | Предмет |
+| `grade` | String | Параллель контента |
+| `level` | String | Уровень сложности |
+
+---
+
+## Связующие таблицы
+
+### Table: `oblakoz_sending_module`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `sending_id` | UInt32 | FK → `oblakoz_sending.id` |
+| `module` | UInt32 | Код модуля |
+
+### Table: `oblakoz_content_module`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `content_id` | UInt32 | FK → `oblakoz_content.id` |
+| `module` | UInt32 | Код модуля |
+
+> Связь sending ↔ content идёт через общее значение `module`:
+> `oblakoz_sending → oblakoz_sending_module → oblakoz_content_module → oblakoz_content`.
 
 ---
 
 ## Common Queries
 
-### Просмотры за день по ролям
+### Количество работ за сегодня
 ```sql
-SELECT role, sum(total_view) as views
-FROM school_work
-WHERE date = today()
-GROUP BY role
+SELECT count() as works, uniqExact(user_id) as students
+FROM oblakoz_sending
+WHERE end_date = today()
 ```
 
-### Топ-10 регионов по активности
+### Топ-10 регионов по активности за неделю
 ```sql
-SELECT region, sum(total_view) as views, uniqExact(school) as schools
-FROM school_work
-WHERE date >= today() - 7
-GROUP BY region
-ORDER BY views DESC
+SELECT sch.region as region,
+       count() as works,
+       uniqExact(s.school_id) as schools,
+       uniqExact(s.user_id) as students
+FROM oblakoz_sending s
+INNER JOIN oblakoz_school sch ON s.school_id = sch.id
+WHERE s.end_date >= today() - 7
+GROUP BY sch.region
+ORDER BY works DESC
 LIMIT 10
 ```
 
-### Средний результат по предметам
+### Топ-10 школ за день
 ```sql
-SELECT subject, avg(result_percent) as avg_score, count() as works
-FROM work_results_n
-WHERE toDate(submission_date) = today()
-GROUP BY subject
+SELECT sch.name as school, sch.region as region,
+       count() as works,
+       uniqExact(s.user_id) as students
+FROM oblakoz_sending s
+INNER JOIN oblakoz_school sch ON s.school_id = sch.id
+WHERE s.end_date = today()
+GROUP BY sch.name, sch.region
+ORDER BY works DESC
+LIMIT 10
+```
+
+### Результаты по параллелям
+```sql
+SELECT grade,
+       count() as works,
+       avg(result) as avg_score
+FROM oblakoz_sending
+WHERE end_date = today()
+  AND grade != ''
+GROUP BY grade
+ORDER BY grade
+```
+
+### Средний результат по предметам (через модуль)
+```sql
+SELECT c.subject as subject,
+       count() as works,
+       avg(s.result) as avg_score
+FROM oblakoz_sending s
+INNER JOIN oblakoz_sending_module sm ON s.id = sm.sending_id
+INNER JOIN oblakoz_content_module cm ON sm.module = cm.module
+INNER JOIN oblakoz_content c ON cm.content_id = c.id
+WHERE s.end_date = today()
+GROUP BY c.subject
 ORDER BY works DESC
 ```
 
-### Недельное сравнение
+### Среднее время выполнения (в минутах) по школам
 ```sql
-SELECT toStartOfWeek(date) as week, sum(total_view) as views
-FROM school_work
-GROUP BY week
-ORDER BY week DESC
-LIMIT 4
+SELECT sch.name as school,
+       round(avg(s.duration) / 60) as avg_minutes,
+       count() as works
+FROM oblakoz_sending s
+INNER JOIN oblakoz_school sch ON s.school_id = sch.id
+WHERE s.end_date = today()
+GROUP BY sch.name
+ORDER BY works DESC
+LIMIT 10
 ```
 
-### Воронка CRM по этапам
+### Динамика по дням за неделю
 ```sql
-SELECT stage_transaction, count() as deals, sum(sum) as total_sum
-FROM company_crm
-GROUP BY stage_transaction
-ORDER BY deals DESC
-```
-
-### Связка учебной активности с CRM (по ИНН)
-```sql
-SELECT
-    c.title,
-    c.stage_transaction,
-    c.sum,
-    count(w.id) as works_count,
-    avg(w.result_percent) as avg_result
-FROM company_crm c
-LEFT JOIN work_results_n w ON c.inn = w.inn
-GROUP BY c.title, c.stage_transaction, c.sum
-ORDER BY works_count DESC
-LIMIT 20
+SELECT end_date as day, count() as works, uniqExact(user_id) as students
+FROM oblakoz_sending
+WHERE end_date >= today() - 7
+GROUP BY day
+ORDER BY day
 ```
 
 ---
 
 ## Типовые сценарии использования
 
-1. **Анализ активности** — просмотры по регионам, школам, предметам
-2. **Результаты работ** — процент выполнения, время, трудоёмкость
-3. **Сравнение школ и регионов** — динамика, топы, отстающие
-4. **CRM-аналитика** — воронка сделок, суммы по этапам
-5. **Связка учёбы и выручки** — JOIN по ИНН школы
+1. **Активность** — количество работ, уникальные ученики и школы по дате
+2. **География** — топ регионов / школ / муниципалитетов (JOIN с `oblakoz_school`)
+3. **Параллели** — распределение по `grade`
+4. **Предметная аналитика** — JOIN sending → content через модуль
+5. **Время выполнения** — `duration` (секунды → минуты)
+
+---
+
+## Правила маппинга со старой схемой
+
+| Старое поле | Новое поле | Примечание |
+|-------------|------------|------------|
+| `work_results_n.submission_date` | `oblakoz_sending.end_date` | Тип теперь `Nullable(Date)` — сравнивать напрямую |
+| `work_results_n.student_id` | `oblakoz_sending.user_id` | |
+| `work_results_n.result_percent` | `oblakoz_sending.result` | |
+| `work_results_n.time_spent` | `oblakoz_sending.duration` | Секунды |
+| `work_results_n.parallel` | `oblakoz_sending.grade` | |
+| `work_results_n.region` | `oblakoz_school.region` (JOIN) | |
+| `work_results_n.school` | `oblakoz_school.name` (JOIN) | |
+| `work_results_n.district` | `oblakoz_school.municipality` (JOIN) | |
+| `work_results_n.inn` | `oblakoz_school.inn` (JOIN) | |
+| `work_results_n.subject` | `oblakoz_content.subject` (JOIN через модуль) | |
+| `work_results_n.level` | `oblakoz_content.level` (JOIN через модуль) | |
+| `work_results_n.work_name` | `oblakoz_content.title` (JOIN через модуль) | |
+| `work_results_n.tasks_count` | `oblakoz_content.tasks_amount` (JOIN через модуль) | |
+| `work_results_n.id_registration` | `oblakoz_sending.registration` | |
+| `work_results_n.id_order` | `oblakoz_sending.order_id` | |
+| `work_results_n.status` | — | Удалено, в новой схеме нет |
+| `work_results_n.work_type` | — | Удалено (есть `oblakoz_content.genre`, но семантика другая) |
+| `work_results_n.class_teacher` | — | Удалено |

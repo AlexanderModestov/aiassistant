@@ -9,75 +9,120 @@ from ai.client import chat
 logger = logging.getLogger(__name__)
 
 DATABASE_SCHEMA = """
-## Таблица work_results_n — Результаты работ
+## Таблица oblakoz_sending — Отправки работ (факты)
 | Колонка | Тип | Описание |
 |---------|-----|----------|
-| id | UInt64 | Уникальный ID |
+| id | UInt32 | Уникальный ID отправки |
+| registration | String | ID регистрации |
+| user_id | String | ID пользователя (ученика) |
+| role | String | Роль (Ученик / Учитель) |
+| school_id | UInt32 | ID школы → JOIN с oblakoz_school.id |
+| grade | String | Параллель / класс (5, 6, 7, ...) |
+| order_id | String | ID заказа |
+| result | UInt32 | Процент выполнения (0-100) |
+| duration | UInt32 | Время выполнения (секунды) |
+| start_date | Nullable(Date) | Дата начала |
+| start_time | Nullable(String) | Время начала |
+| end_date | Nullable(Date) | Дата окончания (используется как дата сдачи) |
+| end_time | Nullable(String) | Время окончания |
+
+## Таблица oblakoz_school — Справочник школ
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | UInt32 | ID школы |
+| inn | String | ИНН |
+| name | String | Название школы |
 | region | String | Регион |
-| district | String | Район |
-| school | String | Школа |
-| class | String | Класс |
-| class_teacher | String | Классный руководитель |
-| student_id | String | ID ученика |
-| student_full_name | String | ФИО ученика |
-| role | String | Роль |
+| municipality | String | Муниципалитет |
+
+## Таблица oblakoz_content — Контент / работы
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | UInt32 | ID контента |
+| title | String | Название работы |
+| tasks_amount | UInt32 | Количество заданий |
+| duration | UInt32 | Длительность |
+| genre | String | Жанр / тип контента |
 | subject | String | Предмет |
-| parallel | String | Параллель (5, 6, 7...) |
+| grade | String | Параллель |
 | level | String | Уровень сложности |
-| work_name | String | Название работы |
-| work_id | String | ID работы |
-| work_type | String | Тип: Самостоятельная работа, КИМ, Лабораторная работа, Интерактивная презентация |
-| tasks_count | UInt32 | Количество заданий |
-| result_percent | UInt32 | Процент выполнения (0-100) |
-| time_spent | UInt32 | Время выполнения (секунды) |
-| labor_intensity | UInt32 | Трудоёмкость |
-| submission_date | String | Дата сдачи (YYYY-MM-DD) |
-| start_date | Date | Дата начала |
-| start_time | String | Время начала |
-| end_date | Date | Дата окончания |
-| status | String | Статус: Отправлено, На согласовании, Подозрительно, Отказ |
-| id_registration | String | ID регистрации |
-| id_order | String | ID заказа |
-| inn | String | ИНН школы |
+
+## Таблица oblakoz_sending_module — Модули отправки
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| sending_id | UInt32 | ID отправки → oblakoz_sending.id |
+| module | UInt32 | Код модуля |
+
+## Таблица oblakoz_content_module — Модули контента
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| content_id | UInt32 | ID контента → oblakoz_content.id |
+| module | UInt32 | Код модуля |
+
+## Связи
+- oblakoz_sending.school_id = oblakoz_school.id — атрибуты школы (регион, муниципалитет, ИНН, название)
+- oblakoz_sending → oblakoz_sending_module (по sending_id) → oblakoz_content_module (по module) → oblakoz_content (по content_id) — атрибуты работы (subject, level, title, genre, tasks_amount)
 """
 
 SQL_EXAMPLES = """
 ## Примеры SQL-запросов
 
--- Средний результат по предметам
-SELECT subject, avg(result_percent) as avg_score, count() as works
-FROM work_results_n
-WHERE toDate(submission_date) = today()
-GROUP BY subject
-ORDER BY works DESC
+-- Количество работ за сегодня
+SELECT count() as works, uniqExact(user_id) as students
+FROM oblakoz_sending
+WHERE end_date = today()
 
 -- Топ-10 регионов по количеству работ
-SELECT region, count() as works, avg(result_percent) as avg_score
-FROM work_results_n
-WHERE toDate(submission_date) >= today() - 7
-GROUP BY region
+SELECT sch.region as region, count() as works, avg(s.result) as avg_score
+FROM oblakoz_sending s
+INNER JOIN oblakoz_school sch ON s.school_id = sch.id
+WHERE s.end_date >= today() - 7
+GROUP BY sch.region
 ORDER BY works DESC
 LIMIT 10
 
--- Статистика по типам работ
-SELECT work_type, count() as works, avg(result_percent) as avg_score
-FROM work_results_n
-GROUP BY work_type
+-- Топ-10 школ за неделю
+SELECT sch.name as school, sch.region as region, count() as works
+FROM oblakoz_sending s
+INNER JOIN oblakoz_school sch ON s.school_id = sch.id
+WHERE s.end_date >= today() - 7
+GROUP BY sch.name, sch.region
 ORDER BY works DESC
+LIMIT 10
 
 -- Результаты по параллелям
-SELECT parallel, count() as works, avg(result_percent) as avg_score
-FROM work_results_n
-WHERE toDate(submission_date) = today()
-GROUP BY parallel
-ORDER BY parallel
+SELECT grade, count() as works, avg(result) as avg_score
+FROM oblakoz_sending
+WHERE end_date = today()
+  AND grade != ''
+GROUP BY grade
+ORDER BY grade
 
 -- Количество работ по дням
-SELECT toDate(submission_date) as date, count() as works
-FROM work_results_n
-WHERE toDate(submission_date) >= today() - 7
+SELECT end_date as date, count() as works
+FROM oblakoz_sending
+WHERE end_date >= today() - 7
 GROUP BY date
 ORDER BY date DESC
+
+-- Средний результат по предметам (JOIN sending → content через модуль)
+SELECT c.subject as subject, count() as works, avg(s.result) as avg_score
+FROM oblakoz_sending s
+INNER JOIN oblakoz_sending_module sm ON s.id = sm.sending_id
+INNER JOIN oblakoz_content_module cm ON sm.module = cm.module
+INNER JOIN oblakoz_content c ON cm.content_id = c.id
+WHERE s.end_date = today()
+GROUP BY c.subject
+ORDER BY works DESC
+
+-- Среднее время выполнения (в минутах) по школам
+SELECT sch.name as school, round(avg(s.duration) / 60) as avg_minutes, count() as works
+FROM oblakoz_sending s
+INNER JOIN oblakoz_school sch ON s.school_id = sch.id
+WHERE s.end_date = today()
+GROUP BY sch.name
+ORDER BY works DESC
+LIMIT 10
 """
 
 SQL_SYSTEM_PROMPT = """Ты SQL-эксперт для аналитики образовательной платформы. База данных: ClickHouse.
@@ -92,10 +137,14 @@ SQL_SYSTEM_PROMPT = """Ты SQL-эксперт для аналитики обр�
 - Используй today() для текущей даты
 - Используй LIMIT при необходимости
 - Для подсчёта уникальных значений используй uniqExact()
-- submission_date в work_results_n — это String, используй toDate(submission_date)
-- НЕ используй UNION ALL — делай простые запросы к одной таблице
-- Используй ТОЛЬКО таблицу work_results_n
-- Время (time_spent) хранится в секундах — при выводе пользователю конвертируй в минуты (time_spent / 60), округляй до целого
+- Используй ТОЛЬКО таблицы oblakoz_*: oblakoz_sending, oblakoz_school, oblakoz_content, oblakoz_sending_module, oblakoz_content_module
+- За «дату сдачи / выполнения работы» считай end_date в oblakoz_sending (тип Nullable(Date), можно сравнивать напрямую: end_date = '2026-05-01')
+- Для атрибутов школы (region, municipality, name, inn) делай JOIN: oblakoz_sending s JOIN oblakoz_school sch ON s.school_id = sch.id
+- Для атрибутов работы (subject, level, title, genre, tasks_amount) делай JOIN через модуль: s → oblakoz_sending_module sm (s.id = sm.sending_id) → oblakoz_content_module cm (sm.module = cm.module) → oblakoz_content c (cm.content_id = c.id)
+- Параллель/класс ученика — это поле grade в oblakoz_sending (НЕ путать с oblakoz_content.grade, которое относится к контенту)
+- Процент выполнения — это поле result в oblakoz_sending
+- Время выполнения (duration) хранится в секундах — при выводе пользователю конвертируй в минуты (duration / 60), округляй до целого
+- НЕ используй UNION ALL — делай простые запросы
 - Возвращай ТОЛЬКО SQL запрос, без пояснений и markdown
 - Если пользователь ссылается на предыдущий вопрос или запрос, используй контекст из истории диалога"""
 

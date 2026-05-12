@@ -29,9 +29,6 @@ ACTIVITY_REPORT_PROMPT = """Ты аналитик образовательной
 🏆 ТОП РЕГИОНОВ ПО АКТИВНОСТИ:
 {top_regions}
 
-📋 СТАТУСЫ РАБОТ:
-{status_breakdown}
-
 Напиши краткий аналитический отчёт для Telegram (4-6 пунктов):
 1. Динамика активности по сравнению со вчера и прошлой неделей
 2. Тренд текущей недели (только с понедельника) — рост или падение
@@ -90,12 +87,6 @@ def generate_activity_report(metrics: dict) -> str:
         for i, r in enumerate(metrics.get("top_regions", []))
     )
 
-    # Format status breakdown
-    status_text = "\n".join(
-        f"  {s['status']}: {s['cnt']}"
-        for s in metrics.get("status_breakdown", [])
-    )
-
     this_week_dates = f"{this_week.get('start_date', '?')} — {this_week.get('end_date', '?')}"
     last_week_dates = f"{last_week.get('start_date', '?')} — {last_week.get('end_date', '?')}"
 
@@ -120,7 +111,6 @@ def generate_activity_report(metrics: dict) -> str:
         last_week_students=last_week.get("active_students", 0),
         top_schools=schools_text or "  Нет данных",
         top_regions=regions_text or "  Нет данных",
-        status_breakdown=status_text or "  Нет данных",
     )
 
     response = chat(messages=[{"role": "user", "content": prompt}])
